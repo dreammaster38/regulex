@@ -24,7 +24,9 @@ function getCharSize(fontSize,fontBold) {
 }
 
 function initTmpText(paper) {
-  _tmpText=_tmpText || paper.text(-1000,-1000,"XgfTlM|.q\nXgfTlM|.q").attr('font-family',FONT_FAMILY);
+  _tmpText=paper.text(
+       -1000,-1000,"XgfTlM|.q\nXgfTlM|.q"
+  ).attr({'font-family':FONT_FAMILY,'font-size':FONT_SIZE});
 }
 
 /**
@@ -36,7 +38,7 @@ function visualize(re,flags,paper) {
   initTmpText(paper);
   _multiLine=!!~flags.indexOf('m');
 
-  var texts=highlight(re.tree,flags);
+  var texts=highlight(re.tree);
 
   texts.unshift(text('/',hlColorMap.delimiter));
   texts.unshift(text("RegExp: "));
@@ -57,7 +59,7 @@ function visualize(re,flags,paper) {
   texts=paper.add(texts);
   paper.setSize(width,charSize.height+PAPER_MARGIN*2);
 
-  var ret=plot(re.tree,flags,0,0);
+  var ret=plot(re.tree,0,0);
 
   height=Math.max(ret.height+3*PAPER_MARGIN+charSize.height,height);
   width=Math.max(ret.width+2*PAPER_MARGIN,width);
@@ -69,7 +71,7 @@ function visualize(re,flags,paper) {
 
 
 
-function plot(tree,flags,x,y) {
+function plot(tree,x,y) {
   tree.unshift({type:'startPoint'});
   tree.push({type:'endPoint'});
   return plotTree(tree,x,y);
@@ -78,7 +80,7 @@ function plot(tree,flags,x,y) {
 function translate(items,dx,dy) {
   items.forEach(function (t) {
     if (t._translate) t._translate(dx,dy);
-    t.x+=dx;t.y+=dy;
+    else {t.x+=dx;t.y+=dy;}
   });
 }
 
@@ -102,9 +104,7 @@ function plotTree(tree,x,y) {
     bottom=Math.max(bottom,ret.y+ret.height);
     items=items.concat(ret.items);
   });
-
   height=bottom-top;
-
   results.reduce(function (a,b) {
     width+=PATH_LEN;
     var p=hline(a.lineOutX,y,b.lineInX);
@@ -136,6 +136,7 @@ function textRect(s,x,y,bgColor,textColor) {
     x:x+w/2,y:y,
     text:s,
     'font-size':FONT_SIZE,
+    'font-family':FONT_FAMILY,
     fill:textColor || 'black'
   };
   return {
@@ -165,6 +166,7 @@ function textLabel(x,y,s,color) {// x is center x ,y is bottom y
     x:x,y:y-textHeight/2-margin,
     text:s,
     'font-size':LABEL_FONT_SIZE,
+    'font-family':FONT_FAMILY,
     fill:color || '#444'
   };
   return {
@@ -194,7 +196,7 @@ function hline(x,y,destX) {
 function smoothLine(fromX,fromY,toX,toY) {
   var radius=10,p,_translate;
   var signX=fromX>toX?-1:1,signY=fromY>toY?-1:1;
-  if (Math.abs(fromY-toY)<radius*2 || Math.abs(fromX-toX)<radius*2) {
+  if (Math.abs(fromY-toY)<radius*1.5 /*|| Math.abs(fromX-toX)<radius*2*/) {
     p=['M',fromX,fromY,
        'C',fromX+Math.min(Math.abs(toX-fromX)/2,radius)*signX,fromY,
        toX-(toX-fromX)/2,toY,
@@ -210,7 +212,7 @@ function smoothLine(fromX,fromY,toX,toY) {
     p=[
       'M',fromX,fromY,
       'Q',fromX+radius*signX,fromY,fromX+radius*signX,fromY+radius*signY,
-      'V',toY-radius*signY,
+      'V',Math.abs(fromY-toY)<radius*2 ? fromY+radius*signY : (toY-radius*signY),
       'Q',fromX+radius*signX,toY,fromX+radius*signX*2,toY,
       'H',toX
     ];
@@ -260,7 +262,7 @@ var plotNode={
     return point(x,y,"r(0.5,0.5)#FFF-#000")
   },
   empty:function (node,x,y) {
-    var len=6;
+    var len=10;
     var l=hline(x,y,x+len);
     return {
       items:[l],
@@ -276,94 +278,138 @@ var plotNode={
     var bgColor='DarkGreen',textColor='white';
     var a=textRect('AnyCharExceptNewLine',x,y,bgColor,textColor);
     a.rect.r=10;
-    a.rect.tip="Any char except CR LF."
+    a.rect.tip="AnyChar except CR LF"
     return a;
   },
   backref:function (node,x,y) {
     var bgColor='navy',textColor='white';
-    var a=textRect('Backref group #'+node.num,x,y,bgColor,textColor);
+    var a=textRect('Backref #'+node.num,x,y,bgColor,textColor);
     a.rect.r=8;
     return a;
   },
   repeat:function (node,x,y) {
-    var padding=8,LABEL_MARGIN=4;
-    var repeat=node.repeat,txt="Repeat ";
+    if (elideOK(node)) return plotNode.empty(null,x,y);
+    var padding=10,LABEL_MARGIN=4;
+    var repeat=node.repeat,txt="",items=[];
+    var NonGreedySkipPathColor='darkgreen';
     /*if (repeat.min===0 && !node._branched) {
       node._branched=true;
       return plotNode.choice({type:CHOICE_NODE,branches:[[{type:EMPTY_NODE}],[node]]},x,y);
     }*/
+    if (repeat.min===repeat.max && repeat.min===0) {
+      return plotNode.empty(null,x,y); // so why allow /a{0}/ ?
+    }
 
     var ret=plotNode[node.type](node,x,y);
+    var width=ret.width,height=ret.height;
 
-    if (repeat.min===repeat.max) {
+    if (repeat.min===repeat.max && repeat.min===1) {
+      return ret; // if someone write /a{1}/
+    } else if (repeat.min===repeat.max) {
       txt+=_plural(repeat.min);
     } else {
       txt+=repeat.min;
       if (isFinite(repeat.max)) {
         txt+= (repeat.max-repeat.min > 1 ? " to " : " or ") +_plural(repeat.max);
       } else {
-        txt+=" or more times.";
+        txt+=" or more times";
       }
     }
 
-    var r=padding;
-    var rectW=ret.width+padding*2,rectH=ret.y+ret.height+padding-y;
-
-    var py=y;
-    var p={
-      type:'path',
-      path:['M',ret.lineInX+padding,py,
-            'Q',x,py,x,py+r,
-            'V',py+rectH-r,
-            'Q',x,py+rectH,x+r,py+rectH,
-            'H',x+rectW-r,
-            'Q',x+rectW,py+rectH,x+rectW,py+rectH-r,
-            'V',py+r,
-            'Q',x+rectW,py,ret.lineOutX+padding,py
-          ],
-      _translate:function (x,y) {
-        var p=this.path;
-        p[1]+=x;p[2]+=y;
-        p[4]+=x;p[5]+=y;p[6]+=x;p[7]+=y;
-        p[9]+=y;
-        p[11]+=x;p[12]+=y;p[13]+=x;p[14]+=y;
-        p[16]+=x;
-        p[18]+=x;p[19]+=y;p[20]+=x;p[21]+=y;
-        p[23]+=y;
-        p[25]+=x;p[26]+=y;p[27]+=x;p[28]+=y;
-      },
-      stroke:'maroon',
-      'stroke-width':2
-    };
-
-    if (repeat.nonGreedy) {
-      txt+="(NonGreedy!)";
-      p.stroke="Brown";
-      p['stroke-dasharray']="-";
+    var offsetX=padding,offsetY=0,r=padding,rectH=ret.y+ret.height-y,rectW=padding*2+ret.width;
+    width=rectW;
+    var p; // repeat rect box path
+    if (repeat.max!==1) {// draw repeat rect box
+      rectH+=padding;
+      height+=padding;
+      p={
+        type:'path',
+        path:['M',ret.x+padding,y,
+              'Q',x,y,x,y+r,
+              'V',y+rectH-r,
+              'Q',x,y+rectH,x+r,y+rectH,
+              'H',x+rectW-r,
+              'Q',x+rectW,y+rectH,x+rectW,y+rectH-r,
+              'V',y+r,
+              'Q',x+rectW,y,ret.x+ret.width+padding,y
+            ],
+        _translate:_curveTranslate,
+        stroke:'maroon',
+        'stroke-width':2
+      };
+      if (repeat.nonGreedy) {
+        //txt+="(NonGreedy!)";
+        p.stroke="Brown";
+        p['stroke-dasharray']="-";
+      }
+      items.push(p);
+    } else { // so completely remove label when /a?/ but not /a??/
+      txt=false;
     }
 
-    var tl=textLabel(x+rectW/2,y,txt);
-    translate([tl.label],0,rectH+tl.height+LABEL_MARGIN); //bottom  label
+    var skipPath;
+    if (repeat.min===0) {//draw a skip path
+      var skipRectH=y-ret.y+padding,skipRectW=rectW+padding*2;
+      offsetX+=padding;
+      offsetY=-padding-2; //tweak,stroke-width is 2
+      width=skipRectW; height+=padding;
+      skipPath={
+        type:'path',
+        path:['M',x,y,
+              'Q',x+r,y,x+r,y-r,
+              'V',y-skipRectH+r,
+              'Q',x+r,y-skipRectH,x+r*2,y-skipRectH,
+              'H',x+skipRectW-r*2,
+              'Q',x+skipRectW-r,y-skipRectH,x+skipRectW-r,y-skipRectH+r,
+              'V',y-r,
+              'Q',x+skipRectW-r,y,x+skipRectW,y
+            ],
+        _translate:_curveTranslate,
+        stroke:repeat.nonGreedy? NonGreedySkipPathColor:'#333',
+        'stroke-width':2
+      };
+      if (p) translate([p],padding,0);
+      items.push(skipPath);
+    }
 
-    var width=Math.max(tl.width,rectW);
-    var offsetX=(width-rectW)/2;
-    if (offsetX) translate([p,tl.label],offsetX,0);
-    translate(ret.items,padding+offsetX,0);
-    ret.items.unshift(p);
-    ret.items.push(tl.label);
+    if (txt) {
+      var tl=textLabel(x+width/2,y,txt);
+      translate([tl.label],0,rectH+tl.height+LABEL_MARGIN); //bottom  label
+      items.push(tl.label);
+      height+=LABEL_MARGIN+tl.height;
+      var labelOffsetX=(Math.max(tl.width,width)-width)/2;
+      if (labelOffsetX) translate(items,labelOffsetX,0);
+      width=Math.max(tl.width,width);
+      offsetX+=labelOffsetX;
+    }
+
+    translate(ret.items,offsetX,0);
+    items=items.concat(ret.items);
     return {
-      items:ret.items,
-      width:width,height:ret.height+padding+tl.height+LABEL_MARGIN,
-      x:offsetX+padding+x,y:ret.y,
-      lineInX:ret.lineInX+padding+offsetX,
-      lineOutX:ret.lineOutX+padding+offsetX
+      items:items,
+      width:width,height:height,
+      x:x,y:ret.y+offsetY,
+      lineInX:ret.lineInX+offsetX,
+      lineOutX:ret.lineOutX+offsetX
     };
 
     function _plural(n) {
-      return n+ ((n<2)? " time.":" times.");
+      return n+ ((n<2)? " time":" times");
+    }
+    function _curveTranslate(x,y) {
+      var p=this.path;
+      p[1]+=x;p[2]+=y;
+      p[4]+=x;p[5]+=y;p[6]+=x;p[7]+=y;
+      p[9]+=y;
+      p[11]+=x;p[12]+=y;p[13]+=x;p[14]+=y;
+      p[16]+=x;
+      p[18]+=x;p[19]+=y;p[20]+=x;p[21]+=y;
+      p[23]+=y;
+      p[25]+=x;p[26]+=y;p[27]+=x;p[28]+=y;
     }
   },
   choice:function (node,x,y) {
+    if (elideOK(node)) return plotNode.empty(null,x,y);
     var marginX=20,spacing=6,paddingY=4,height=0,width=0;
     var branches=node.branches.map(function (branch) {
       var ret=plotTree(branch,x,y);
@@ -374,15 +420,30 @@ var plotNode={
     height+=(branches.length-1)*spacing+paddingY*2;
     width+=marginX*2;
 
-    var centerX=x+width/2,dy=y-height/2+paddingY,lineOutX=x+width,
-        items=[];
+    var centerX=x+width/2,dy=y-height/2+paddingY,// destY
+        lineOutX=x+width,items=[];
     branches.forEach(function (a) {
-      var dx=centerX-a.width/2;
+      var dx=centerX-a.width/2; // destX
       translate(a.items,dx-a.x,dy-a.y);
+      items=items.concat(a.items);
+      /*
       var p1=smoothLine(x,y,dx-a.x+a.lineInX,y+dy-a.y);
       var p2=smoothLine(lineOutX,y,a.lineOutX+dx-a.x,y+dy-a.y);
       items=items.concat(a.items);
+      items.push(p1,p2);*/
+       // current a.y based on y(=0),its middle at y=0
+      var lineY=y+dy-a.y;
+      var p1=smoothLine(x,y,x+marginX,lineY);
+      var p2=smoothLine(lineOutX,y,x+width-marginX,lineY);
       items.push(p1,p2);
+      if (x+marginX!==dx-a.x+a.lineInX) {
+        items.push(hline(x+marginX,lineY,dx-a.x+a.lineInX));
+      }
+      if (a.lineOutX+dx-a.x!==x+width-marginX) {
+        items.push(hline(a.lineOutX+dx-a.x,lineY,x+width-marginX));
+      }
+
+      a.x=dx;a.y=dy;
       dy+=a.height+spacing;
     });
 
@@ -511,6 +572,7 @@ var plotNode={
     };
   },
   group:function (node,x,y) {
+    if (elideOK(node)) return plotNode.empty(null,x,y);
     var padding=10,lineColor='silver',strokeWidth=2;
     var sub=plotTree(node.sub,x,y);
     if (node.num) {
@@ -532,7 +594,7 @@ var plotNode={
       return {
         items:items,
         width:width,
-        height:rectH+tl.height,
+        height:rectH+tl.height+4, // 4 is margin
         x:x,y:tl.y,
         lineInX:offsetX+sub.lineInX+padding,lineOutX:offsetX+sub.lineOutX+padding
       };
@@ -558,12 +620,12 @@ var plotNode={
     if (nat===AssertLookahead) {
       lineColor="CornflowerBlue";
       fg="darkgreen";
-      txt="If followed by:";
+      txt="Followed by:";
     } else if (nat===AssertNegativeLookahead) {
       lineColor="#F63";
       fg="Purple";
       //txt="Negative\nLookahead!"; // break line
-      txt="If not followed by:";
+      txt="Not followed by:";
     }
 
     var sub=plotNode.group(node,x,y);
@@ -594,7 +656,27 @@ var plotNode={
   }
 };
 
+function elideOK(a) {
+  if (Array.isArray(a)) {//stack
+    var stack=a;
+    for (var i=0;i<stack.length;i++) {
+      if (!elideOK(stack[i])) return false;
+    }
+    return true;
+  }
+  var node=a;
+  if (node.type===EMPTY_NODE) return true;
 
+  if (node.type===GROUP_NODE && node.num===undefined) {
+    return elideOK(node.sub);
+  }
+
+  if (node.type===CHOICE_NODE) {
+
+    return elideOK(node.branches);
+  }
+
+}
 
 var hlColorMap={
   delimiter:'Indigo',
@@ -632,7 +714,7 @@ var hlColorMap={
 /**
 @param {AST.tree} re AST.tree return by `parse`
 */
-function highlight(tree,flags) {
+function highlight(tree) {
   var texts=[];
   tree.forEach(function (node) {
     if (node.sub) {

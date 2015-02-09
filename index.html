@@ -2,15 +2,18 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>Regulex &colon; JavaScript Regular Expression Visualizer.</title>
+<title>Regulex：JavaScript Regular Expression Visualizer.</title>
 <style>
-body,body * {
+body,html * {
 margin:0;
 padding:0;
-font-family: "DejaVu Sans Mono",monospace;
+font-family:sans-serif;
 }
 body {
 background: #303030;
+}
+.code,.code * {
+  font-family: "DejaVu Sans Mono",monospace;
 }
 h1 {
 font-size:3em;
@@ -18,8 +21,9 @@ color:#40C0FF;
 margin:14px 0;
 padding:0 16px;
 padding-top:40px;
-padding-bottom: 30px;
+padding-bottom: 20px;
 border-bottom:2px dashed grey;
+min-height:60px;
 }
 h1 em{
 color:#BBE0E0;
@@ -27,6 +31,7 @@ font-size:small;
 padding-left:2em;
 font-style: normal;
 font-weight:normal;
+display:inline-block;
 }
 #inputCt,#errorBox {
 margin:8px 16px;
@@ -69,6 +74,7 @@ width:100%;
 #inputCt label {
   color:white;
   cursor:pointer;
+  display:inline-block;
 }
 #inputCt label input {
   margin-right:4px;
@@ -94,7 +100,6 @@ margin: 10px;
 margin-left:0;
 padding:12px;
 padding-bottom:10px;
-font-family: sans-serif;
 color:#EEF;
 border:none;
 cursor:pointer;
@@ -129,16 +134,13 @@ margin:0 auto;
 }
 footer {
 text-align: center;
-border-top:1px solid #EEE;
-width:50%;
-min-width:400px;
+border-top:1px solid grey;
 margin:1em auto;
 padding:10px;
 font-size:1.2em;
 }
 footer,footer a {
 color:#EEF;
-font-family: "Comic Sans MS";
 }
 body.embed {
   background: #EEE;
@@ -153,17 +155,18 @@ body.embed #inputCt,
 body.embed #github {
   display:none !important;
 }
-body.embed footer,body.embed footer a {
+body.embed footer {
+  display:none;
+}
+body.embed div.footer,body.embed div.footer a {
   color:white;
   font-size: 14px;
-  font-family: sans-serif;
 }
-body.embed footer {
+body.embed div.footer {
   display:block;
-  width:10em;
-  min-width:10em;
+  width:auto;
   margin:0;
-  padding:2px;
+  padding:2px 10px;
   background:rgb(75,0,130);
   opacity: 0.9;
   position:fixed;
@@ -205,14 +208,14 @@ function getParams() {
   return params;
 }
 </script>
-<h1>Regulex<em>JavaScript Regular Expression Visualizer.</em></h1>
+<h1>Regulex <em>JavaScript Regular Expression Visualizer.</em></h1>
 <div id="inputCt">
-    <div class="re">
+    <div class="re code">
       <table>
         <tr>
           <td style="width:1em">/</td>
           <td style="width:auto">
-            <input id="input" class="input" value="(a|b\d+)*c" />
+            <input id="input" class="input" value="^(a|b)*?$" />
           </td>
           <td style="width:1em">/</td>
           <td style="width:3em" id="flagBox"></td>
@@ -226,15 +229,18 @@ function getParams() {
     <label><input type="checkbox" name="flag" value="m" />Multiline</label>
     <label><input type="checkbox" name="flag" value="g" />GlobalMatch</label>
 </div>
-<p id="errorBox">Error Message</p>
-<div id="graphCt"></div>
+<p id="errorBox" class="code">Error Message</p>
+<div id="graphCt" class="code"></div>
 
 <!--script src="http://cdn.staticfile.org/require.js/2.1.15/require.min.js"></script-->
 <!--script src="http://libs.useso.com/js/require.js/2.1.11/require.min.js"></script-->
 
-<script src="src/libs/require.js" charset="utf-8"></script>
-
 <script type="text/javascript" charset="utf-8">
+params.debug=true;
+/*
+//var raphael="http://cdn.staticfile.org/raphael/2.1.2/raphael-min.js";
+var raphael="http://libs.useso.com/js/raphael/2.1.2/raphael-min.js";
+*/
 function $(id) {return document.getElementById(id)}
 function $$(q) {return document.querySelector(q)}
 
@@ -242,15 +248,26 @@ var raphael='src/libs/raphael';
 var visualize='src/visualize';
 var parse='src/parse';
 var Kit='src/Kit';
-/*
-var visualize='dest/visualize';
-var parse='dest/parse';
-var Kit='dest/Kit';
-//var raphael="http://cdn.staticfile.org/raphael/2.1.2/raphael-min.js";
-var raphael="http://libs.useso.com/js/raphael/2.1.2/raphael-min.js";
-*/
-require([raphael,visualize,parse,Kit],function (R,visualize,parse,K) {
 
+if (params.debug) {
+  document.write('<script src="src/libs/require.js" charset="utf-8"><'+'/script>');
+  window.addEventListener('DOMContentLoaded',function () {
+    require([raphael,visualize,parse,Kit],init);
+  });
+} else {
+  document.write('<script src="dest/regulex.js" charset="utf-8"><'+'/script>');
+  window.addEventListener('DOMContentLoaded',function () {
+    raphael=require('regulex').Raphael;
+    parse = require('regulex').parse;
+    visualize = require('regulex').visualize;
+    Kit=require('regulex').Kit;
+    init(raphael,visualize,parse,Kit);
+  });
+
+}
+
+
+function init(R,visualize,parse,K) {
 var paper = R('graphCt', 10, 10);
 var input=$('input');
 var inputCt=$('inputCt');
@@ -261,7 +278,7 @@ var errorBox=$('errorBox');
 var flags=document.getElementsByName('flag');
 var flagBox=$('flagBox');
 var getInputValue=function () {
-    return input.value=trim(input.value);
+    return trim(input.value);
 };
 var setInputValue=function (v) {
   return input.value=trim(v);
@@ -280,15 +297,17 @@ dragGraph($('graphCt'));
 
 visualIt();
 
-function visualIt() {
+function visualIt(skipError) {
   var re=getInputValue();
-  if (!re) return false;
+  changeHash();
   hideError();
   var ret;
   try {ret=parse(re)}
   catch (e) {
     if (e instanceof parse.RegexSyntaxError) {
-      showError(re,e);
+      if (!skipError) {
+        showError(re,e);
+      }
     } else throw e;
     return false;
   }
@@ -309,11 +328,29 @@ function showError(re,err) {
   setInnerText(errorBox,msg.join("\n"));
 }
 
+function changeHash() {
+  var re=getInputValue();
+  var flags=getFlags();
+  location.hash="#!embed=false&flags="+flags+"&re="+encodeURIComponent(params.re=re);
+}
+
 function initListeners() {
   var LF='\n'.charCodeAt(0),CR='\r'.charCodeAt(0);
   input.addEventListener('keydown',onEnter);
+  input.addEventListener('keyup',onKeyup);
+  input.addEventListener('paste',function (evt) {
+    var content=trim(evt.clipboardData.getData('text'));
+    if (content[0]==='/' && /\/[img]*$/.test(content)) {
+      evt.preventDefault();
+      var endIndex=content.lastIndexOf('/');
+      setFlags(content.slice(endIndex+1));
+      content=content.slice(1,endIndex);
+      setInputValue(content);
+    }
+    setTimeout(visualIt,50);
+  });
   visualBtn.addEventListener('click',function () {
-    visualIt(getInputValue());
+    visualIt();
   });
   embedBtn.addEventListener('click',function () {
     if (!visualIt()) return false;
@@ -322,7 +359,7 @@ function initListeners() {
     src=i>0?src.slice(0,i):src;
     changeHash();
     var re=getInputValue();
-    var html='<iframe src="'+src+'#!embed=true&flags='+getFlags()+'&re='+encodeURIComponent(re)+'"></iframe>'
+    var html='<iframe frameborder="0" width="'+Math.ceil(paper.width)+'" height="'+Math.ceil(paper.height)+'" src="'+src+'#!embed=true&flags='+getFlags()+'&re='+encodeURIComponent(re)+'"></iframe>'
     window.prompt("Copy the html code:",html);
   });
 
@@ -330,14 +367,7 @@ function initListeners() {
     exportImage();
   });
 
-  //var manualHash=false;
-  function changeHash() {
-    var re=getInputValue();
-    var flags=getFlags();
-    //manualHash=true;
-    location.hash="#!embed=false&flags="+flags+"&re="+encodeURIComponent(params.re=re);
-    //manualHash=false;
-  }
+
   /*
   window.addEventListener('hashchange',function () {
     if (manualHash) return;
@@ -357,13 +387,25 @@ function initListeners() {
     visualIt();
     changeHash();
   }
+
+
+  var onKeyupTid;
+  function onKeyup(e) {
+    if (e.keyCode===LF || e.keyCode===CR) {
+      return true;
+    }
+    clearTimeout(onKeyupTid);
+    onKeyupTid=setTimeout(function () {
+      var skipError=true;
+      visualIt(skipError);
+    },100);
+  }
   function onEnter(e) {
     if (e.keyCode===LF || e.keyCode===CR) {
       e.preventDefault();
       e.stopPropagation();
-    } else return;
-    visualIt();
-    changeHash();
+      visualIt();
+    }
   }
 }
 
@@ -471,11 +513,16 @@ function clearSelect() {
     document.selection.empty();
   }
 }
-});
+}
 </script>
 
 
 <footer>Created by <a href="http://jex.im/" target="_blank">Jex</a>.</footer>
+<script>
+if (params.embed) {
+  document.write('<div class="footer"><a href="'+location.href+'&embed=false" target="_blank">Generated by Regulex.</a></div>');
+}
+</script>
 <a id="github" href="https://github.com/JexCheng/regulex" target="_blank" style="display:inline-block;width:149px;height:149px;position: absolute; top: 0; right: 0; border: 0;"><img style="width:149px;height:149px;position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/e7bbb0521b397edbd5fe43e7f760759336b5e05f/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f677265656e5f3030373230302e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"></a>
 </body>
 </html>
